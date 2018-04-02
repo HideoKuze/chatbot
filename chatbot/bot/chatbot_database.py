@@ -39,7 +39,7 @@ def transaction_builder(sql, text, intent, entities):
 	global sql_transaction
 	sql_transaction.append(sql)
 
-	if len(sql_transaction) > 1:
+	if len(sql_transaction) > 0:
 		cursor.execute('START TRANSACTION')
 		for s in sql_transaction:
 			try:
