@@ -11,6 +11,14 @@ https://docs.djangoproject.com/en/1.11/ref/settings/
 """
 
 import os
+#using celery for async task queues 
+import djcelery
+djcelery.setup_loader()
+#save this for production
+#broker_url = 'amqp://myuser:mypassword@localhost:5672/myvhost'
+
+BROKER_URL = "django://"
+
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,13 +35,19 @@ SECRET_KEY = 'k%yz@7o5_w2a=sys@s5!4jdsi=%+1d)qjyjim)09sh^0z)9r$a'
 SLACK_CLIENT_ID = "313273723988.314347608487"
 SLACK_CLIENT_SECRET = "a08db4147a511f0480e24d000093adf8"
 SLACK_VERIFICATION_TOKEN = "xBjgdOAKCKr1yPv9DTJU86uq"
-SLACK_BOT_USER_TOKEN = "xoxb-312642183648-7UjTlM0HRaltSBipoAENL2Jv"
+#mrchatbot
+SLACK_BOT_USER_TOKEN = "xoxb-318657942753-jM9wMoJzhKMCtMgeCaFaTkCO"
+#chatbot
+'xoxb-312642183648-7UjTlM0HRaltSBipoAENL2Jv' 
+CHATLIO_BOT_TOKEN = "U98PFTATW"
+VISITOR_ID = 'B98PFTATE'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['c3136111.ngrok.io',
-'127.0.0.1',]
+#tunnel information
+ALLOWED_HOSTS = ['f2280157.ngrok.io',
+'127.0.0.1', 'localhost']
 
 
 # Application definition
@@ -46,7 +60,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'chatbot',
+    'bot',
+    'djcelery',
+    'kombu.transport.django',
 ]
 
 MIDDLEWARE = [
@@ -83,10 +99,15 @@ WSGI_APPLICATION = 'chatbot.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/1.11/ref/settings/#databases
 
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'chatbot',
+        'USER': 'root',
+        'PASSWORD': 'gits2501',
+        'HOST': 'localhost',
+        'PORT': '3306',
     }
 }
 
@@ -128,3 +149,5 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.11/howto/static-files/
 
 STATIC_URL = '/static/'
+
+#"C:/Users\ELITEBOOK/.virtualenvs/chatbot/lib/site-packages/rest_framework/templates/"
