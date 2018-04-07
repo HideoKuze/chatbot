@@ -5,20 +5,20 @@ import os
 
 cnx = mysql.connector.connect(user='root', password='gits2501',
 	host='localhost', database='chatbot')
-
 cursor = cnx.cursor()
 
 sql_transaction = []
-datasets = ['greetings']
+datasets = ['conversation_data']
+#have a list of all intents so we can iterate through them and create their respective tables
 
 #insert the dataset into the database
 def create_table():
-	op = '''CREATE TABLE greetings (
-       text TEXT NOT NULL,
-       intent TEXT NOT NULL,
-       entities TEXT NOT NULL
-       )
-       '''
+	op = '''CREATE TABLE conversation (
+	text TEXT NOT NULL,
+	intent TEXT NOT NULL,
+	entities TEXT,
+	reply TEXT NOT NULL,
+	)'''
 	cursor.execute(op)
 	
 
@@ -35,7 +35,7 @@ def acceptable(data):
 def format_data(data):
 	data = data.replace("\n", " ").replace("\r", " ").replace('"', "'")
 
-def transaction_builder(sql, text, intent, entities):
+def transaction_builder(sql, text, intent, entities, reply):
 	global sql_transaction
 	sql_transaction.append(sql)
 
@@ -44,20 +44,21 @@ def transaction_builder(sql, text, intent, entities):
 		for s in sql_transaction:
 			try:
 				#use arguments in execution instead to avoid SQL injections https://docs.djangoproject.com/en/1.11/topics/db/sql/
-				cursor.execute(s, (text, intent, entities))
+				cursor.execute(s, (text, intent, entities, reply))
 			except Exception as e:
 				print e
 
 		cnx.commit()
 		sql_transaction = []
 
-def insert_message(text, intent, entities):
+def insert_message(text, intent, entities, reply):
 	try:
 		#avoid using placeholders to avoid SQL injection, will pass text, intent and entities to transaction_builder() instead
-		sql = """INSERT INTO greetings (text, intent, entities) VALUES (%s, %s, %s)"""
-		transaction_builder(sql, text, intent, entities)
+		sql = """INSERT INTO conversation  (text, intent, entities, reply) VALUES (%s, %s, %s, %s)"""
+		transaction_builder(sql, text, intent, entities, reply)
 	except Exception as e:
 		print ('error is', str(e))
+
 
 if __name__ == "__main__": 
 	create_table()
@@ -70,10 +71,11 @@ if __name__ == "__main__":
 				content = properties['property']
 
 				for messages in content:
-					if messages['intent'] == 'greet':
-						if acceptable(messages['text']):
-							message_text = messages['text']
-							message_intent = messages['intent']
-							message_entities = messages['entities']
+					if acceptable(messages['text']):
+						message_text = messages['text']
+						message_intent = messages['intent']
+						message_entities = messages['entities']
+						message_reply = messages['reply']
 
-							insert_message(message_text, message_intent, message_entities)
+						insert_message(message_text, message_intent, message_entities, message_reply)
+
