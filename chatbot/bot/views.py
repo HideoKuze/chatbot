@@ -6,8 +6,14 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from slackclient import SlackClient
-from models import Keywords, Responses
-from serializers import KeywordsSerializer, ResponsesSerializer
+import mysql.connector
+import json
+from datetime import datetime
+import os
+from itertools import izip #for iterating files in parallel
+import codecs
+import nltk
+import spacy
 
 SLACK_VERIFICATION_TOKEN = getattr(settings, 'SLACK_VERIFICATION_TOKEN', None)
 SLACK_BOT_USER_TOKEN = getattr(settings, 'SLACK_BOT_USER_TOKEN', None)
@@ -25,12 +31,12 @@ class Events(APIView):
 		slack_message = request.data
 
 		#serialize the Python model data
-		keywords_serializer = KeywordsSerializer.objects.all()
-		bot_responses_serializer = ResponsesSerializer.objects.all()
+		#keywords_serializer = KeywordsSerializer.objects.all()
+		#bot_responses_serializer = ResponsesSerializer.objects.all()
 
 		#render the Python data type into JSON
-		keywords = JSONRenderer().render(keywords_serializer.data)
-		bot_responses = JSONRenderer.render(bot_responses_serializer.data)
+		#keywords = JSONRenderer().render(keywords_serializer.data)
+		#bot_responses = JSONRenderer.render(bot_responses_serializer.data)
 
 		#verify token
 		if slack_message.get('token') != SLACK_VERIFICATION_TOKEN:
@@ -48,33 +54,53 @@ class Events(APIView):
 
 			#handle the message by parsing the JSON data
 			user = event_message.get('user')
-			text = event_message.get('text')
+			user_text = event_message.get('text')
 			channel = event_message.get('channel')
-			bot_text = 'Hi there welcome to Proswap support, how may I help?'
+			bot_text = ''
+			
+			
 
 			#sometimes you have to close the chat and refresh the page
 			#finally use the slack api to post the message with chat.postMessage
-			if 'hello' in text.lower():
-				Client.api_call(method='chat.postMessage',
-					channel=channel,
-					text=bot_text) #this should be the output of word_processor?
-				return Response(status=status.HTTP_200_OK)
+
+
+			intents = {
+			'greet':['hey','howdy', 'hey there','hello', 'hi'],
+			'deposit':['You can do so here: placeholder.com'],
+			'feedback':['You can do so here: placeholder.com'],
+			'fee': ['fee', 'charge', 'price'],
+			'influence-score': ['impact', 'score'],
+			'delete' : ['delete', 'remove', 'rid']
+			}
+
+			#get the subject from determine_subject()
+			subject = determine_subject(user_text)
+
+			try:
+				with codecs.open('C:/Users/ELITEBOOK/documents/github/chatbot/chatbot/bot/chat.from', 'r', encoding='utf8') as table2, codecs.open('C:/Users/ELITEBOOK/documents/github/chatbot/chatbot/bot/chat.to','r', encoding='utf8') as table3:
+					for human_line, robo_line in zip(table2,table3):
+						#have to use split() to remove the space that appears when reading a file
+						for keys in intents:
+							if user_text.split()[0] in intents[keys]:
+								print True
+								break
+																				
+			except Exception, e:
+				raise e
+			 
+			Client.api_call(method='chat.postMessage',
+				channel=channel,
+				text=bot_text) 
+			return Response(status=status.HTTP_200_OK)
 		
 		return Response(status=status.HTTP_200_OK)
 
-		def word_processor(self, request, text):
+		def determine_subject(sentence):
+			nlp = spacy.load('en')
+			tokens = nlp(sentence) #tokenize the text
 
-			input_dictionary = {'hi': 'Hi there welcome to ProSwap support, how may I help?'}
-
-			slack_message = request.data
-			event_message = slack_message.get('event')
-			text = slack_message.get('text')
-			reply = ''
-
-			for key in input_dictionary:
-				if key = text:
-					reply = input_dictionary[key]
-
-			
-
-		return Response(reply)
+			for token in tokens:
+				#find the subject
+				if token.dep_ == 'nsubj':
+					subject = token.dep_
+					return subject

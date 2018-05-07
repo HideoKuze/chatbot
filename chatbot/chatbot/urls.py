@@ -16,13 +16,12 @@ Including another URLconf
 from django.conf.urls import url
 from django.contrib import admin
 from bot import views
-from bot.views import Events, chatlio_view
+from bot.views import Events
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^events/', Events.as_view()),
    # url(r'^data/', Data.as_view()),
    # url(r'^conversation-archive/', ConversationArchive.as_view()),
-    url(r'^widget/', chatlio_view.as_view()),
 
 ]

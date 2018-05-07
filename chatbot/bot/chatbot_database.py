@@ -1,7 +1,10 @@
+# -*- coding: utf-8 -*-
 import mysql.connector
 import json
 from datetime import datetime
 import os
+import re
+from itertools import izip #for iterating files in parallel
 
 cnx = mysql.connector.connect(user='root', password='gits2501',
 	host='localhost', database='chatbot')
@@ -14,17 +17,17 @@ datasets = ['conversation_data']
 #insert the dataset into the database
 def create_table():
 	op = '''CREATE TABLE conversation (
-	text TEXT NOT NULL,
-	intent TEXT NOT NULL,
-	entities TEXT,
-	reply TEXT NOT NULL,
+	text TEXT NULL,
+	intent TEXT NULL,
+	entities TEXT NULL,
+	reply TEXT NULL
 	)'''
 	cursor.execute(op)
 	
 
 #only accept data that is of certain length
 def acceptable(data):
-	if len(data.split(' ')) > 40 or len(data) < 2:
+	if len(data.split(' ')) < 2:
 		return False
 	elif len(data) > 300:
 		return False
@@ -53,7 +56,7 @@ def transaction_builder(sql, text, intent, entities, reply):
 
 def insert_message(text, intent, entities, reply):
 	try:
-		#avoid using placeholders to avoid SQL injection, will pass text, intent and entities to transaction_builder() instead
+		#avoid using placeholders to prevent SQL injection, will pass text, intent and entities to transaction_builder() instead
 		sql = """INSERT INTO conversation  (text, intent, entities, reply) VALUES (%s, %s, %s, %s)"""
 		transaction_builder(sql, text, intent, entities, reply)
 	except Exception as e:
@@ -79,3 +82,11 @@ if __name__ == "__main__":
 
 						insert_message(message_text, message_intent, message_entities, message_reply)
 
+	with open('C:/Users/ELITEBOOK/documents/github/chatbot/chatbot/bot/human_text.txt', 'r') as table2, open('C:/Users/ELITEBOOK/documents/github/chatbot/chatbot/bot/robo_text.txt','r') as table3:
+		for line, robo_line in zip(table2,table3):
+			#for robo_line in table3.readlines():
+			message_intent = ''
+			message_entities = ''
+			#cursor.execute('START TRANSACTION')
+			cursor.execute("INSERT INTO conversation (text, reply) VALUES (%s, %s)", (line, robo_line))
+			cnx.commit()
