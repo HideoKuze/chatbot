@@ -1,92 +1,153 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from django.shortcuts import render
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.conf import settings
-from slackclient import SlackClient
-import mysql.connector
-import json
-from datetime import datetime
-import os
-from itertools import izip #for iterating files in parallel
-from train_intent_parser import test_model
-import codecs
-import nltk
+from __future__ import unicode_literals, print_function
+
+import plac
+import random
 import spacy
-
-SLACK_VERIFICATION_TOKEN = getattr(settings, 'SLACK_VERIFICATION_TOKEN', None)
-SLACK_BOT_USER_TOKEN = getattr(settings, 'SLACK_BOT_USER_TOKEN', None)
-CHATLIO_BOT_TOKEN = getattr(settings, 'CHATLIO_BOT_TOKEN', None)
-Client = SlackClient(SLACK_BOT_USER_TOKEN)
-#automatically searches for meta.json file
-trained_model_path = 'C:/Users/Elitebook/Documents/Github/chatbot/chatbot/bot/'
+from pathlib import Path
 
 
-# Create your views here.
+# training data: texts, heads and dependency labels
+# for no relation, we use an arbitrary dependency the label '-'
+TRAIN_DATA = [
+    ("root How do I delete my account?", {
+        'heads': [0, 3, 3, 3, 3, 5, 3, 3],  # index of token head
+        'deps': ['ROOT', '-', '-', '-', 'DEL-ACCOUNT-INTENT', '-', 'OBJECT', '-']
+    }),
+    ("root How do I add a balance?", {
+        'heads': [0, 3, 3, 3, 3, 5, 3, 3],
+        'deps': ['ROOT', '-', '-', '-', 'ADD-BALANCE-INTENT', '-', 'OBJECT', '-']
+    }),
+    ("root How do I deposit my funds into my bank account?", {
+        'heads': [0, 3, 3, 3, 3, 5, 3, 3, 9, 9, 6, 3],
+        'deps': ['ROOT', '-','-', '-', 'DEPOSIT-FUNDS-INTENT', '-', '-', '-', '-', '-', 'OBJECT', '-']
+    }),
+    ("root How do I fill out feedback forms?", {
+        'heads': [0, 3, 3, 3, 3, 3, 6, 3, 3],
+        'deps': ['ROOT','-', '-', '-', 'ADD-FEEDBACK-INTENT', '-', '-', 'OBJECT', '-']
+    }),
+    ("root How does my profile impact my score?", {
+        'heads': [0, 4, 4, 4, 4, 4, 6, 4, 4],
+        'deps': ['ROOT','-', '-', '-', '-', 'SCORE-INTENT', '-', 'OBJECT', '-']
+    }),
+    ("root What are the fees?", {
+        'heads': [0, 1, 1, 3, 1, 1],
+        'deps': ['ROOT', '-', '-', '-', 'FEES-INTENT', '-']
+    }),
+    ("root How do I update my profile picture?", {
+        'heads': [0, 3, 3, 3, 3, 6, 6, 3, 3],
+        'deps': ['ROOT', '-', '-', '-', 'CHANGE-PIC-INTENT', '-', 'OBJECT', 'OBJECT', '-']
+    }),
+    ("root How do I add a referral to the marketplace?", {
+        'heads': [0, 3, 3, 3, 3, 5, 3, 3, 8, 6, 3],
+        'deps': ['ROOT', '-', '-', '-', 'ADD-REFERRAL-INTENT', '-', 'OBJECT', '-', '-', 'OBJECT', '-']
+    }),
+    ("root add feedback", {
+        'heads': [0, 0, 1],
+        'deps': ['ROOT', 'ADD-FEEDBACK-INTENT', 'OBJECT']
+    }),
+    ("root add balance", {
+        'heads': [0, 0, 1],
+        'deps': ['ROOT', 'ADD-BALANCE-INTENT', 'OBJECT']
+    }),
+    ("root delete my account", {
+        'heads': [0, 0, 3, 1],
+        'deps': ['ROOT', 'DEL-ACCOUNT-INTENT', '-', 'OBJECT']
+    }),
+    ("root change my picture", {
+        'heads': [0, 0, 3, 1],
+        'deps': ['ROOT', 'CHANGE-PIC-INTENT', '-', 'OBJECT']
+    }),
+    ("root change picture", {
+        'heads': [0, 0, 2],
+        'deps': ['ROOT', 'CHANGE-PIC-INTENT', '-', 'OBJECT']
+    }),
+]
 
-class Events(APIView):
-	def post(self, request, *args, **kwargs):
+#autmatically searches for meta.json file
+save_path = 'C:/Users/Elitebook/Documents/Github/chatbot/chatbot/bot/'
+
+@plac.annotations(
+    model=("Model name. Defaults to blank 'en' model.", "option", "m", str),
+    output_dir=("Optional output directory", "option", "o", Path),
+    n_iter=("Number of training iterations", "option", "n", int),
+    )
+def main(model=None, output_dir=save_path, n_iter=25):
+    """Load the model, set up the pipeline and train the parser."""
+    if model is not None:
+        nlp = spacy.load(model)  # load existing spaCy model
+        print("Loaded model '%s'" % model)
+    else:
+        nlp = spacy.blank('en')  # create blank Language class
+        print("Created blank 'en' model")
+
+    # We'll use the built-in dependency parser class, but we want to create a
+    # fresh instance – just in case.
+    if 'parser' in nlp.pipe_names:
+        nlp.remove_pipe('parser')
+    parser = nlp.create_pipe('parser')
+    nlp.add_pipe(parser, first=True)
+
+    #add new labels to the parser
+    for text, annotations in TRAIN_DATA:
+        for dep in annotations.get('deps', []):
+            parser.add_label(dep)
+
+    other_pipes = [pipe for pipe in nlp.pipe_names if pipe != 'parser']
+    with nlp.disable_pipes(*other_pipes):  # only train parser
+        optimizer = nlp.begin_training()
+        for itn in range(n_iter):
+            random.shuffle(TRAIN_DATA)
+            losses = {}
+            for text, annotations in TRAIN_DATA:
+                nlp.update([text], [annotations], sgd=optimizer, losses=losses)
+            print(losses)
+
+    # test the trained model
+    #test_model(nlp)
+
+    # save model to output directory
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        if not output_dir.exists():
+            output_dir.mkdir()
+        nlp.to_disk(output_dir)
+        print("Saved model to", output_dir)
+
+        # test the saved model
+        '''print("Loading from", output_dir)
+        nlp2 = spacy.load(output_dir)
+        test_model(nlp2)'''
+
+responses = {
+            'GREET-INTENT':['hey','howdy', 'hey there','hello', 'hi'],
+            'DEPOSIT-FUNDS-INTENT':['You can do so here: placeholder.com'],
+            'ADD-FEEDBACK-INTENT':['You can do so here: placeholder.com'],
+            'ADD-BALANCE-INTENT':['You can do so here: placeholder.com'],
+            'FEES-INTENT': ['You can do so here: placeholder.com'],
+            'SCORE-INTENT': ['You can do so here: placeholder.com'],
+            'DEL-ACCOUNT-INTENT' : ['You can do so here: placeholder.com'],
+            'CHANGE-PIC-INTENT' : ['You can do so here: placeholder.com']
+            }
 
 
-		slack_message = request.data
+def test_model(nlp, text):
+    intents = []
+    docs = nlp.pipe(text)
+    for doc in docs:
+        [intents.append(tokens.dep_) for tokens in doc if 'INTENT' in tokens.dep_]
 
-		#serialize the Python model data
-		#keywords_serializer = KeywordsSerializer.objects.all()
-		#bot_responses_serializer = ResponsesSerializer.objects.all()
-
-		#render the Python data type into JSON
-		#keywords = JSONRenderer().render(keywords_serializer.data)
-		#bot_responses = JSONRenderer.render(bot_responses_serializer.data)
-
-		#verify token
-		if slack_message.get('token') != SLACK_VERIFICATION_TOKEN:
-			return Response(status=status.HTTP_403_FORBIDDEN)
-
-		#checking for url verification
-		if slack_message.get('type') == 'url_verification':
-			return Response(data=slack_message, status=status.HTTP_200_OK)
-
-		#send a greeting to the bot
-		if 'event' in slack_message:
-			#process message if event data is contained in it
-			event_message = slack_message.get('event')
+    return responses[intents[0]][0]
 
 
-			#handle the message by parsing the JSON data
-			user = event_message.get('user')
-			user_text = event_message.get('text')
-			channel = event_message.get('channel')
-			bot_text = 'hi'
-			
-			
+if __name__ == '__main__':
+    print ("Loading from", save_path)
+    nlp2 = spacy.load(save_path)
+    #has to be a list
+    text = ['change picture']
+    parsable_text = 'root ' + text[0]
+    dependencies = test_model(nlp2, [parsable_text])
+    print (dependencies)
 
-			#sometimes you have to close the chat and refresh the page
-			#finally use the slack api to post the message with chat.postMessage
+    
 
-			#get the subject from determine_subject()
-
-			nlp = spacy.load(trained_model_path)
-			#need to add 'root' to the beginning of the text because spaCy does not automatically label the first word as the root
-			parsable_text = 'root ' + user_text
-			bot_response = test_model(nlp, [parsable_text])
-
-			try:
-				Client.api_call(method='chat.postMessage',
-					channel=channel,
-					text=bot_response) 
-				return Response(status=status.HTTP_200_OK)
-			except Exception as e:
-				Client.api_call(method='chat.postMessage',
-					channel=channel,
-					text=e) 
-				return Response(status=status.HTTP_200_OK)
-
-			'''if user_text == 'How do I delete my account?':
-				Client.api_call(method='chat.postMessage',
-					channel=channel,
-					text=dependencies) 
-				return Response(status=status.HTTP_200_OK)'''
-		
-		return Response(status=status.HTTP_200_OK)
