@@ -11,6 +11,7 @@ import json
 from datetime import datetime
 import os
 from itertools import izip #for iterating files in parallel
+from train_intent_parser import test_model
 import codecs
 import nltk
 import spacy
@@ -19,7 +20,8 @@ SLACK_VERIFICATION_TOKEN = getattr(settings, 'SLACK_VERIFICATION_TOKEN', None)
 SLACK_BOT_USER_TOKEN = getattr(settings, 'SLACK_BOT_USER_TOKEN', None)
 CHATLIO_BOT_TOKEN = getattr(settings, 'CHATLIO_BOT_TOKEN', None)
 Client = SlackClient(SLACK_BOT_USER_TOKEN)
-
+#automatically searches for meta.json file
+trained_model_path = 'C:/Users/Elitebook/Documents/Github/chatbot/chatbot/bot/'
 
 
 # Create your views here.
@@ -56,51 +58,35 @@ class Events(APIView):
 			user = event_message.get('user')
 			user_text = event_message.get('text')
 			channel = event_message.get('channel')
-			bot_text = ''
+			bot_text = 'hi'
 			
 			
 
 			#sometimes you have to close the chat and refresh the page
 			#finally use the slack api to post the message with chat.postMessage
 
-
-			intents = {
-			'greet':['hey','howdy', 'hey there','hello', 'hi'],
-			'deposit':['You can do so here: placeholder.com'],
-			'feedback':['You can do so here: placeholder.com'],
-			'fee': ['fee', 'charge', 'price'],
-			'influence-score': ['impact', 'score'],
-			'delete' : ['delete', 'remove', 'rid']
-			}
-
 			#get the subject from determine_subject()
-			subject = determine_subject(user_text)
+
+			nlp = spacy.load(trained_model_path)
+			#need to add 'root' to the beginning of the text because spaCy does not automatically label the first word as the root
+			parsable_text = 'root ' + user_text
+			bot_response = test_model(nlp, [parsable_text])
 
 			try:
-				with codecs.open('C:/Users/ELITEBOOK/documents/github/chatbot/chatbot/bot/chat.from', 'r', encoding='utf8') as table2, codecs.open('C:/Users/ELITEBOOK/documents/github/chatbot/chatbot/bot/chat.to','r', encoding='utf8') as table3:
-					for human_line, robo_line in zip(table2,table3):
-						#have to use split() to remove the space that appears when reading a file
-						for keys in intents:
-							if user_text.split()[0] in intents[keys]:
-								print True
-								break
-																				
-			except Exception, e:
-				raise e
-			 
-			Client.api_call(method='chat.postMessage',
-				channel=channel,
-				text=bot_text) 
-			return Response(status=status.HTTP_200_OK)
+				Client.api_call(method='chat.postMessage',
+					channel=channel,
+					text=bot_response) 
+				return Response(status=status.HTTP_200_OK)
+			except Exception as e:
+				Client.api_call(method='chat.postMessage',
+					channel=channel,
+					text=e) 
+				return Response(status=status.HTTP_200_OK)
+
+			'''if user_text == 'How do I delete my account?':
+				Client.api_call(method='chat.postMessage',
+					channel=channel,
+					text=dependencies) 
+				return Response(status=status.HTTP_200_OK)'''
 		
 		return Response(status=status.HTTP_200_OK)
-
-		def determine_subject(sentence):
-			nlp = spacy.load('en')
-			tokens = nlp(sentence) #tokenize the text
-
-			for token in tokens:
-				#find the subject
-				if token.dep_ == 'nsubj':
-					subject = token.dep_
-					return subject
